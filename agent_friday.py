@@ -15,8 +15,6 @@ Run:
 import os
 import logging
 import subprocess
-import io
-import wave
 
 
 from dotenv import load_dotenv
@@ -213,9 +211,8 @@ def _build_llm():
 
 
 def _build_tts():
-    # Create Sarvam TTS instance
-    tts_engine = sarvam.TTS(
-        target_language_code="en-IN",    # English works reliably
+    return sarvam.TTS(
+        target_language_code="en-IN",
         model="bulbul:v3",
         speaker="shubh",
         pace=1.0,
@@ -223,35 +220,8 @@ def _build_tts():
         output_audio_bitrate="128k",
         min_buffer_size=50,
         max_chunk_length=150,
-        speech_sample_rate=22050,        # ensures WAV-compatible PCM
+        speech_sample_rate=22050,
     )
-
-    # Wrapper to ensure WAV container
-    class WAVTTSWrapper:
-        def __init__(self, tts):
-            self._tts = tts
-
-        async def synthesize(self, text: str) -> bytes:
-            # Get raw audio bytes from Sarvam
-            raw_bytes = await self._tts.synthesize(text)
-
-            # Wrap in WAV container if not already RIFF/WAVE
-            if raw_bytes[:4] != b"RIFF":
-                buf = io.BytesIO()
-                with wave.open(buf, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)  # 16-bit PCM
-                    wf.setframerate(self._tts.speech_sample_rate)
-                    wf.writeframes(raw_bytes)
-                raw_bytes = buf.getvalue()
-
-            return raw_bytes
-
-        # Proxy attributes for LiveKit
-        def __getattr__(self, name):
-            return getattr(self._tts, name)
-
-    return WAVTTSWrapper(tts_engine)
 
 
 # ---------------------------------------------------------------------------
