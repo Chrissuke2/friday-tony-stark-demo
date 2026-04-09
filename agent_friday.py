@@ -15,9 +15,6 @@ Run:
 import os
 import logging
 import subprocess
-import io
-import wave
-
 
 from dotenv import load_dotenv
 from livekit.agents import JobContext, WorkerOptions, cli
@@ -213,45 +210,29 @@ def _build_llm():
 
 
 def _build_tts():
-    # Create Sarvam TTS instance
-    tts_engine = sarvam.TTS(
-        target_language_code="en-IN",    # English works reliably
-        model="bulbul:v3",
-        speaker="shubh",
-        pace=1.0,
-        temperature=0.6,
-        output_audio_bitrate="128k",
-        min_buffer_size=50,
-        max_chunk_length=150,
-        speech_sample_rate=22050,        # ensures WAV-compatible PCM
-    )
-
-    # Wrapper to ensure WAV container
-    class WAVTTSWrapper:
-        def __init__(self, tts):
-            self._tts = tts
-
-        async def synthesize(self, text: str) -> bytes:
-            # Get raw audio bytes from Sarvam
-            raw_bytes = await self._tts.synthesize(text)
-
-            # Wrap in WAV container if not already RIFF/WAVE
-            if raw_bytes[:4] != b"RIFF":
-                buf = io.BytesIO()
-                with wave.open(buf, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)  # 16-bit PCM
-                    wf.setframerate(self._tts.speech_sample_rate)
-                    wf.writeframes(raw_bytes)
-                raw_bytes = buf.getvalue()
-
-            return raw_bytes
-
-        # Proxy attributes for LiveKit
-        def __getattr__(self, name):
-            return getattr(self._tts, name)
-
-    return WAVTTSWrapper(tts_engine)
+    if TTS_PROVIDER == "sarvam":
+        logger.info("TTS → Sarvam Bulbul v3")
+        return sarvam.TTS(
+            target_language_code="hi-IN",     # or "en-IN" if you want English
+            model="bulbul:v3",
+            speaker="shubh",
+            pace=1.15,                        # matches your previous TTS_SPEED
+            temperature=0.6,
+            output_audio_bitrate="128k",
+            min_buffer_size=50,
+            max_chunk_length=150,
+            speech_sample_rate=16000           # optional, match your pipeline
+        )
+    elif TTS_PROVIDER == "gemini":
+        logger.info("TTS → Google Gemini TTS")
+        return lk_google.TTS(
+            language=SARVAM_TTS_LANGUAGE,
+            model_name="gemini-2.5-flash-tts",
+            voice_name=SARVAM_TTS_SPEAKER,
+            speaking_rate=TTS_SPEED
+        )
+    else:
+        raise ValueError(f"Unknown TTS_PROVIDER: {TTS_PROVIDER!r}")
 
 
 # ---------------------------------------------------------------------------
