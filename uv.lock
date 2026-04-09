@@ -660,7 +660,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
     { name = "httpx" },
-    { name = "livekit-agents", extra = ["deepgram", "groq", "openai", "sarvam", "silero"] },
+    { name = "livekit-agents", extra = ["deepgram", "google", "groq", "openai", "sarvam", "silero"] },
     { name = "livekit-plugins-google" },
     { name = "python-dotenv" },
 ]
@@ -669,7 +669,7 @@ dependencies = [
 requires-dist = [
     { name = "fastmcp" },
     { name = "httpx" },
-    { name = "livekit-agents", extras = ["deepgram", "groq", "openai", "sarvam", "silero"], specifier = ">=1.5.1" },
+    { name = "livekit-agents", extras = ["deepgram", "google", "groq", "openai", "sarvam", "silero"], specifier = "~=1.4" },
     { name = "livekit-plugins-google", specifier = ">=1.5.1" },
     { name = "python-dotenv" },
 ]
@@ -1278,6 +1278,9 @@ codecs = [
 ]
 deepgram = [
     { name = "livekit-plugins-deepgram" },
+]
+google = [
+    { name = "livekit-plugins-google" },
 ]
 groq = [
     { name = "livekit-plugins-groq" },

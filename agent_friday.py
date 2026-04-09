@@ -15,11 +15,15 @@ Run:
 import os
 import logging
 import subprocess
+import io
+import wave
+
 
 from dotenv import load_dotenv
 from livekit.agents import JobContext, WorkerOptions, cli
 from livekit.agents.voice import Agent, AgentSession
 from livekit.agents.llm import mcp
+from livekit.plugins import sarvam
 
 # Plugins
 from livekit.plugins import google as lk_google, openai as lk_openai, sarvam, silero
@@ -30,13 +34,11 @@ from livekit.plugins import google as lk_google, openai as lk_openai, sarvam, si
 
 STT_PROVIDER       = "sarvam"
 LLM_PROVIDER       = "gemini"
-TTS_PROVIDER       = "openai"
+TTS_PROVIDER       = "sarvam"
 
-GEMINI_LLM_MODEL   = "gemini-2.5-flash"
+GEMINI_LLM_MODEL   = "gemini-2.5-flash-lite"
 OPENAI_LLM_MODEL   = "gpt-4o"
 
-OPENAI_TTS_MODEL   = "tts-1"
-OPENAI_TTS_VOICE   = "nova"       # "nova" has a clean, confident female tone
 TTS_SPEED           = 1.15
 
 SARVAM_TTS_LANGUAGE = "en-IN"
@@ -211,19 +213,45 @@ def _build_llm():
 
 
 def _build_tts():
-    if TTS_PROVIDER == "sarvam":
-        logger.info("TTS → Sarvam Bulbul v3")
-        return sarvam.TTS(
-            target_language_code=SARVAM_TTS_LANGUAGE,
-            model="bulbul:v3",
-            speaker=SARVAM_TTS_SPEAKER,
-            pace=TTS_SPEED,
-        )
-    elif TTS_PROVIDER == "openai":
-        logger.info("TTS → OpenAI TTS (%s / %s)", OPENAI_TTS_MODEL, OPENAI_TTS_VOICE)
-        return lk_openai.TTS(model=OPENAI_TTS_MODEL, voice=OPENAI_TTS_VOICE, speed=TTS_SPEED)
-    else:
-        raise ValueError(f"Unknown TTS_PROVIDER: {TTS_PROVIDER!r}")
+    # Create Sarvam TTS instance
+    tts_engine = sarvam.TTS(
+        target_language_code="en-IN",    # English works reliably
+        model="bulbul:v3",
+        speaker="shubh",
+        pace=1.0,
+        temperature=0.6,
+        output_audio_bitrate="128k",
+        min_buffer_size=50,
+        max_chunk_length=150,
+        speech_sample_rate=22050,        # ensures WAV-compatible PCM
+    )
+
+    # Wrapper to ensure WAV container
+    class WAVTTSWrapper:
+        def __init__(self, tts):
+            self._tts = tts
+
+        async def synthesize(self, text: str) -> bytes:
+            # Get raw audio bytes from Sarvam
+            raw_bytes = await self._tts.synthesize(text)
+
+            # Wrap in WAV container if not already RIFF/WAVE
+            if raw_bytes[:4] != b"RIFF":
+                buf = io.BytesIO()
+                with wave.open(buf, "wb") as wf:
+                    wf.setnchannels(1)
+                    wf.setsampwidth(2)  # 16-bit PCM
+                    wf.setframerate(self._tts.speech_sample_rate)
+                    wf.writeframes(raw_bytes)
+                raw_bytes = buf.getvalue()
+
+            return raw_bytes
+
+        # Proxy attributes for LiveKit
+        def __getattr__(self, name):
+            return getattr(self._tts, name)
+
+    return WAVTTSWrapper(tts_engine)
 
 
 # ---------------------------------------------------------------------------
